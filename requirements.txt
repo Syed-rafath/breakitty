@@ -1,2 +1,4 @@
 ollama
 plyer
+httpx
+python-dotenv

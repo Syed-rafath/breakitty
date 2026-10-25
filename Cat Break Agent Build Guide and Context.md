@@ -14,7 +14,7 @@ Copy everything in this section into the first message of the new conversation.
 
 ## Part 2: Quick concepts
 
-- **Open weights:** the company published the trained model files, so you can download and run the model on your own computer. No API key, no per-request cost, and nothing you type leaves your machine. Examples: Gemma, Llama, DeepSeek.
+- **Open weights:** the company published the trained model files, so you can download and run the model on your own computer. The model itself can run locally without a paid inference API. Examples: Gemma, Llama, DeepSeek. This project separately calls the YouTube Data API, which receives the selected video's generic search query and requires your own API key.
 - **Gemma:** Google's family of small open-weight models. Hacktoberfest isn't only about Gemma; "Best Use of Gemma" is just one optional prize category you can also enter.
 - **Ollama:** a free program that downloads and runs open-weight models locally.
 - **What the model does here:** it only outputs text, but that text is a decision (which vibe) plus a joke. Normal Python code handles the scheduling, notifications, and link picking.
@@ -56,70 +56,39 @@ python -m venv .venv
 
 Select `.venv\Scripts\python.exe` as the VS Code Python interpreter so Pylance and the script use the same environment.
 
-### Step 4: Collect cat videos
+### Step 4: Get a YouTube Data API key
 
-Find 10 to 20 funny cat video links (YouTube is fine). Tag each as `calm`, `chaotic`, or `cute`. Aim for at least 3 per vibe.
+The [YouTube Data API](https://developers.google.com/youtube/data/getting-started) has a default limit of 100 search calls per day ([quota details](https://developers.google.com/youtube/data/determine_quota_cost)). The script caches up to 50 results per vibe and limits itself to 90 searches in any rolling 24-hour period.
 
-### Step 5: Save the script
+1. In the [Google Cloud Console](https://console.cloud.google.com/), create a project and enable **YouTube Data API v3**.
+2. Create an API key and restrict it to the YouTube Data API.
+3. Copy `.env.example` to `.env` and replace the placeholder with your key:
 
-Create a file called `catbreak.py` and paste this in. Replace the example links with your own.
-
-```python
-import json, time, random
-from datetime import datetime
-import ollama
-from plyer import notification
-
-MODEL = "gemma3:1b"  # switch to gemma3:4b later to compare
-
-CLIPS = [
-    {"url": "https://youtube.com/watch?v=REPLACE1", "vibe": "calm"},
-    {"url": "https://youtube.com/watch?v=REPLACE2", "vibe": "chaotic"},
-    {"url": "https://youtube.com/watch?v=REPLACE3", "vibe": "cute"},
-]
-
-FALLBACK = {"vibe": "cute", "message": "Stretch, drink water, then look at this cat."}
-INTERVAL = 3600  # seconds; use 30 while testing
-
-start = time.time()
-
-def ask_model(hours_worked, clock):
-    prompt = f"""It is {clock}. The user has been at their computer for {hours_worked:.1f} hours.
-Choose the best cat video vibe from: calm, chaotic, cute.
-Write a short, funny, gentle nudge to stretch or drink water.
-Reply only as JSON: {{"vibe": "...", "message": "..."}}"""
-    r = ollama.chat(model=MODEL, messages=[{"role": "user", "content": prompt}], format="json")
-    return json.loads(r["message"]["content"])
-
-while True:
-    hours = (time.time() - start) / 3600
-    try:
-        out = ask_model(hours, datetime.now().strftime("%I:%M %p"))
-        if "vibe" not in out or "message" not in out:
-            out = FALLBACK
-    except Exception:
-        out = FALLBACK
-    options = [c for c in CLIPS if c["vibe"] == out["vibe"]] or CLIPS
-    clip = random.choice(options)
-    notification.notify(title="Cat break", message=f'{out["message"]}\n{clip["url"]}', timeout=20)
-    print(datetime.now(), out, clip["url"])
-    time.sleep(INTERVAL)
 ```
+YOUTUBE_API_KEY=your-key-here
+```
+
+Keep `.env` private; it is excluded from Git. Do not paste the key into chat or commit it.
+
+### Step 5: Run the script
+
+The `catbreak.py` script asks Gemma for a vibe and gentle nudge, searches YouTube for relevant videos published within the last 30 days, and opens a new browser tab to the selected watch page. It caches search results and avoids recently shown videos; it does not download video files. The browser may still require a click to start playback or enable sound, depending on its autoplay policy.
 
 ### Step 6: Test it
 
-Change `INTERVAL = 3600` to `INTERVAL = 30`, then run:
+The script is currently set to `INTERVAL = 30` for testing. Set it to `3600` for hourly breaks, then run:
 
 ```
-python catbreak.py
+.\.venv\Scripts\python.exe .\catbreak.py
 ```
 
-You should see a notification within a few seconds (the first reply can take longer while the model loads). Let it run 3 or 4 rounds and note what the model gets right and wrong.
+You should see a notification and a new browser tab within a few seconds (the first reply can take longer while the model loads). The script remembers recently shown video IDs and reuses cached search results to avoid an API request every break.
 
 **If something breaks:**
 
 - *Connection error:* Ollama isn't running. Open the Ollama app, or run `ollama serve` in another terminal.
 - *Model not found:* the name in `MODEL` doesn't match what you pulled. Run `ollama list` to see exact names.
+- *YouTube API error:* check that the API is enabled, the key is correct, and its restriction allows the YouTube Data API v3.
 - *No notification appears:* check your OS notification or Focus Assist settings. The `print` line still shows the output in the terminal, which is enough for a demo.
 - *Laptop freezes:* close other apps, or drop to a smaller model.
 
@@ -129,7 +98,7 @@ Pull `gemma3:4b`, set `MODEL = "gemma3:4b"`, and run the same test. Write down f
 
 ### Step 8: Capture your demo
 
-Set `INTERVAL` back to 3600. Screen-record a notification popping up (Windows: Win+Shift+S for a screenshot, or Xbox Game Bar with Win+G for video). A short GIF or clip is plenty.
+Set `INTERVAL` to 3600. Screen-record a notification and the browser opening a video (Windows: Win+Shift+S for a screenshot, or Xbox Game Bar with Win+G for video). A short GIF or clip is plenty.
 
 ## Part 4: Write the DEV post
 
@@ -139,7 +108,7 @@ The write-up is weighted most heavily, so give it at least 30 minutes. Use the S
 2. **Who it's for and what effort it saves:** people who sit for hours and forget to move, with no need to scroll for a good video.
 3. **Demo:** your screen recording or screenshots.
 4. **How it works:** Ollama, Gemma, and the Python script in a few short paragraphs, with the key code.
-5. **Why open weights mattered:** it works offline, nothing about my work habits leaves my laptop, and an hourly job costs nothing. Say where this beat a closed API.
+5. **Why open weights mattered:** Gemma runs locally without a paid inference API, so the prompt containing the time and session duration stays on the laptop. Be transparent that video search separately sends a generic vibe-based query and API key to Google's YouTube Data API.
 6. **What went wrong (be honest):** the 1B model's broken JSON, the fallback you added, and the 1B vs 4B comparison.
 7. **What's next:** ideas such as detecting real idle time, a local vision model to filter videos, or a phone notification.
 

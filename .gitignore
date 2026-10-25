@@ -2,3 +2,5 @@
 __pycache__/
 *.py[cod]
 .env
+video-cache.json
+video-cache.json.tmp
